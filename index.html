@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Minha Escala"/>
+  <meta name="theme-color" content="#0a1628"/>
+  <title>Minha Escala</title>
+  <link rel="manifest" href="manifest.json"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0a1628;--surface:#111f38;--surface2:#172845;
+      --border:#1e3558;--text:#e8eef8;--muted:#6b82a8;--accent:#3a8dde;
+      --pre-emb:#c0392b;
+      --emb:#d4a017;
+      --desemb:#27ae60;
+      --folga:#1a4a2e;    --folga-txt:#4ade80;
+      --ferias:#1565c0;   --ferias-txt:#90caf9;
+      --he:#d4630a;       --he-txt:#fff;
+      --terra:#ffffff;    --terra-txt:#0a1628;
+      --cancelado:#2d2d3a;--cancelado-txt:#666;
+      --today-ring:#3a8dde;
+      --turno-dia:#e57373;      --turno-dia-txt:#fff;
+      --turno-noite:#7b1e1e;    --turno-noite-txt:#ffcdd2;
+      --emb-custom:#b87d10;
+      --sel-border:#f0c040;
+    }
+    body{background:var(--bg);color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      min-height:100vh;padding-bottom:80px}
+    header{background:var(--surface);border-bottom:1px solid var(--border);
+      padding:16px 20px 12px;position:sticky;top:0;z-index:100;backdrop-filter:blur(8px)}
+    header h1{font-size:20px;font-weight:700;letter-spacing:.5px}
+    header p{font-size:12px;color:var(--muted);margin-top:2px}
+    .month-nav{display:flex;align-items:center;justify-content:space-between;
+      padding:14px 20px;background:var(--surface2);border-bottom:1px solid var(--border)}
+    .month-nav button{background:var(--border);border:none;color:var(--text);
+      width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;
+      display:flex;align-items:center;justify-content:center}
+    .month-nav h2{font-size:17px;font-weight:600;text-transform:capitalize}
+
+    /* ── CALENDÁRIO ── */
+    .calendar-wrap{padding:12px 10px 6px}
+    .weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:4px}
+    .weekdays span{font-size:10px;color:var(--muted);font-weight:600;padding:3px 0}
+    .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+    .day-cell{aspect-ratio:1;border-radius:7px;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;font-size:12px;font-weight:500;
+      cursor:pointer;position:relative;transition:transform .1s,box-shadow .1s;
+      background:transparent;color:var(--muted);user-select:none;-webkit-tap-highlight-color:transparent}
+    .day-cell:active{transform:scale(.88)}
+    .day-cell.empty{pointer-events:none}
+    .day-cell.before-range{opacity:.25;pointer-events:none}
+    .day-cell.after-range {opacity:.25;pointer-events:none}
+
+    .day-cell.folga       {background:var(--folga);      color:var(--folga-txt)}
+    .day-cell.pre-emb     {background:var(--pre-emb);    color:#fff}
+    .day-cell.embarque    {background:var(--emb);        color:#000}
+    .day-cell.embarque-mod{background:var(--emb-custom); color:#fff}
+    .day-cell.desembarque {background:var(--desemb);     color:#fff}
+    .day-cell.ferias      {background:var(--ferias);     color:var(--ferias-txt)}
+    .day-cell.he          {background:var(--he);         color:var(--he-txt)}
+    .day-cell.turno-dia   {background:var(--turno-dia);  color:var(--turno-dia-txt)}
+    .day-cell.turno-noite {background:var(--turno-noite);color:var(--turno-noite-txt)}
+    .day-cell.cancelado   {background:var(--cancelado);  color:var(--cancelado-txt)}
+    .day-cell.terra       {background:var(--terra);      color:var(--terra-txt)}
+
+    .day-cell.today{box-shadow:inset 0 0 0 2px var(--today-ring)}
+    .day-cell.today::after{content:'';position:absolute;bottom:2px;
+      width:4px;height:4px;border-radius:50%;background:var(--today-ring)}
+
+    /* selecionado (modo multi-select) */
+    .day-cell.selected{box-shadow:inset 0 0 0 2.5px var(--sel-border);filter:brightness(1.2)}
+    .day-cell.selected::before{content:'✓';position:absolute;top:1px;right:3px;
+      font-size:8px;color:var(--sel-border);font-weight:900}
+
+    .day-label{font-size:7.5px;margin-top:1px;opacity:.9;text-align:center;line-height:1.1}
+
+    /* ── BARRA DE SELEÇÃO ── */
+    .sel-bar{display:none;background:#1a3060;border-bottom:1px solid var(--sel-border);
+      padding:10px 16px;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:62px;z-index:90}
+    .sel-bar.visible{display:flex}
+    .sel-bar-info{font-size:13px;font-weight:600;color:var(--sel-border)}
+    .sel-bar-info small{color:var(--muted);font-size:11px;display:block;font-weight:400}
+    .sel-bar-btns{display:flex;gap:6px}
+    .sel-bar-btns button{padding:7px 12px;border-radius:8px;border:none;
+      font-size:12px;font-weight:600;cursor:pointer}
+    .sb-apply{background:var(--accent);color:#fff}
+    .sb-cancel{background:var(--border);color:var(--text)}
+
+    /* ── LEGENDA ── */
+    .legend{display:flex;flex-wrap:wrap;gap:6px;padding:6px 12px 14px}
+    .leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+    .leg-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+
+    /* ── CONFIG ── */
+    .config-panel{background:var(--surface);border-radius:16px;
+      margin:0 12px 16px;padding:18px;border:1px solid var(--border)}
+    .config-panel h3{font-size:15px;margin-bottom:14px;color:var(--accent)}
+    .field{margin-bottom:14px}
+    .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    .field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);
+      color:var(--text);border-radius:10px;padding:10px 14px;font-size:15px;outline:none;appearance:none}
+    .field input[type=month]{color:var(--text)}
+    .field input:focus,.field select:focus{border-color:var(--accent)}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+    .toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+    .toggle-row label{font-size:13px;color:var(--muted);flex:1}
+    .toggle{width:42px;height:24px;background:var(--border);border-radius:12px;
+      cursor:pointer;position:relative;border:none;transition:background .2s}
+    .toggle.on{background:var(--accent)}
+    .toggle::after{content:'';position:absolute;top:3px;left:3px;
+      width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s}
+    .toggle.on::after{left:21px}
+
+    /* ── BOTÕES ── */
+    .btn{display:block;width:100%;padding:12px;border-radius:12px;
+      border:none;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-warning{background:#7c4a00;color:#fbbf24;margin-top:8px}
+    .btn-danger {background:#7f1d1d;color:#fca5a5;margin-top:8px}
+    .btn-cancel {background:var(--border);color:var(--text)}
+    .btn-success{background:#14532d;color:var(--folga-txt)}
+
+    /* ── MODAL ── */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);
+      display:flex;align-items:flex-end;justify-content:center;z-index:200}
+    .modal-overlay.hidden{display:none}
+    .modal{background:var(--surface);border-radius:20px 20px 0 0;
+      width:100%;max-width:480px;padding:24px 20px 40px;
+      border-top:1px solid var(--border);max-height:92vh;overflow-y:auto}
+    .modal h3{font-size:17px;margin-bottom:14px}
+    .modal-info{background:var(--surface2);border-radius:10px;padding:14px;
+      font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.7}
+    .modal-info strong{color:#fbbf24}
+    .modal-info .ok{color:var(--folga-txt)}
+    .modal-info .bad{color:#fca5a5}
+    .modal-btns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+    .modal-btns .btn{margin-top:0;flex:1;min-width:120px}
+    .modal-field{margin-bottom:14px}
+    .modal-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    .modal-field input,.modal-field select{width:100%;background:var(--surface2);
+      border:1px solid var(--border);color:var(--text);border-radius:10px;
+      padding:10px 14px;font-size:15px;outline:none;appearance:none}
+    .modal-field input:focus,.modal-field select:focus{border-color:var(--accent)}
+    .calc-box{background:#0d2240;border-radius:10px;padding:12px;
+      font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:14px;
+      border:1px solid var(--border)}
+    .calc-box .val{color:var(--folga-txt);font-weight:700}
+
+    /* ── GRID TIPOS ── */
+    .tipo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px}
+    .tipo-btn{padding:10px 4px;border-radius:10px;border:2px solid var(--border);
+      background:var(--surface2);color:var(--muted);font-size:11px;font-weight:600;
+      cursor:pointer;text-align:center;transition:all .15s}
+    .tipo-btn:active{transform:scale(.93)}
+    .tipo-btn.sel{border-color:var(--sel-border);color:var(--text)}
+    .tipo-btn .dot{width:18px;height:18px;border-radius:5px;margin:0 auto 5px}
+
+    /* ── STATUS ── */
+    .status-bar{background:var(--surface2);border-radius:12px;
+      margin:0 12px 16px;padding:12px 16px;border:1px solid var(--border);
+      font-size:13px;line-height:1.7}
+    .status-bar strong{color:var(--accent)}
+
+    /* ── TABS ── */
+    .tabs{display:flex;margin:0 12px 14px;background:var(--surface2);
+      border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+    .tab{flex:1;padding:9px 2px;text-align:center;font-size:10.5px;font-weight:600;
+      cursor:pointer;color:var(--muted);background:transparent;border:none;
+      transition:background .2s,color .2s;line-height:1.3}
+    .tab.active{background:var(--accent);color:#fff}
+    .tab-content{display:none}
+    .tab-content.active{display:block}
+
+    /* ── LISTAS ── */
+    .ajustes-list,.ferias-list{padding:0 12px}
+    .ajuste-item,.ferias-item{background:var(--surface);border:1px solid var(--border);
+      border-radius:10px;padding:12px 14px;margin-bottom:10px}
+    .ajuste-item .aj-header{display:flex;justify-content:space-between;align-items:flex-start}
+    .aj-info{font-size:13px;line-height:1.5}
+    .aj-info small{color:var(--muted);font-size:11px}
+    .aj-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
+    .badge-he{background:var(--he);color:#fff}
+    .badge-auto{background:#1e3a5f;color:#90caf9}
+    .ajuste-item button,.ferias-item .del-btn{background:#7f1d1d;border:none;color:#fca5a5;
+      border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;margin-top:8px}
+    .ferias-item{display:flex;justify-content:space-between;align-items:center}
+    .ferias-item .info{font-size:13px;line-height:1.5}
+    .ferias-item .info small{color:var(--muted);font-size:11px;display:block}
+    .ferias-item .conflict-tag{color:#fca5a5;font-size:11px;font-weight:600}
+    .ferias-item .del-btn{margin-top:0;padding:6px 12px;white-space:nowrap}
+    .ferias-item.conflict{border-color:#c0392b}
+
+    .empty-state{text-align:center;color:var(--muted);padding:28px 20px;font-size:14px}
+    .section-title{font-size:12px;color:var(--muted);font-weight:700;
+      text-transform:uppercase;letter-spacing:.5px;padding:0 12px 8px;margin-top:4px}
+    .info-box{background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+      margin:0 12px 14px;padding:12px;font-size:12px;color:var(--muted);line-height:1.6}
+    .info-box strong{color:var(--text)}
+
+    /* período desativado no calendário */
+    .range-end-tag{font-size:9px;background:#7f1d1d;color:#fca5a5;
+      border-radius:4px;padding:1px 4px;margin:2px 12px 0;text-align:center}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚓ Minha Escala</h1>
+  <p id="headerSub">Escala de embarque offshore</p>
+</header>
+
+<!-- barra de seleção múltipla -->
+<div class="sel-bar" id="selBar">
+  <div class="sel-bar-info">
+    <span id="selCount">0 dias selecionados</span>
+    <small>Toque nos dias • depois em Aplicar</small>
+  </div>
+  <div class="sel-bar-btns">
+    <button class="sb-apply" onclick="abrirModalMulti()">Aplicar</button>
+    <button class="sb-cancel" onclick="cancelarMultiSelect()">✕</button>
+  </div>
+</div>
+
+<div class="month-nav">
+  <button id="prevMonth">‹</button>
+  <h2 id="monthTitle"></h2>
+  <button id="nextMonth">›</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('calendario')">📅 Calendário</button>
+  <button class="tab" onclick="switchTab('config')">⚙️ Escala</button>
+  <button class="tab" onclick="switchTab('ajustes')">🔄 Ajustes</button>
+  <button class="tab" onclick="switchTab('ferias')">🏖️ Férias</button>
+</div>
+
+<!-- CALENDÁRIO -->
+<div id="tab-calendario" class="tab-content active">
+  <div class="calendar-wrap">
+    <div class="weekdays">
+      <span>Dom</span><span>Seg</span><span>Ter</span>
+      <span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+    </div>
+    <div class="calendar-grid" id="calGrid"></div>
+  </div>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--pre-emb)"></div>Pré-emb.</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--emb)"></div>Embarque</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--turno-dia)"></div>T.Dia</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--turno-noite)"></div>T.Noite</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--desemb)"></div>Desemb.</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--folga)"></div>Folga</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--terra);border:1px solid #aaa"></div>Em terra</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--he)"></div>HE</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--ferias)"></div>Férias</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--cancelado);border:1px solid #555"></div>Cancelado</div>
+  </div>
+  <div class="status-bar" id="statusBar">Configure sua escala na aba <strong>Escala</strong>.</div>
+  <div class="info-box" style="margin-top:0">
+    <strong>💡 Toque num dia</strong> para editar. <strong>Toque e segure</strong> para ativar seleção múltipla e marcar vários dias de uma vez.
+  </div>
+</div>
+
+<!-- CONFIG ESCALA -->
+<div id="tab-config" class="tab-content">
+  <div class="config-panel">
+    <h3>🛳️ Parâmetros da Escala</h3>
+    <div class="field">
+      <label>Data do 1º embarque (início da escala)</label>
+      <input type="date" id="embarqueDate"/>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Dias embarcado</label>
+        <input type="number" id="diasEmb" min="1" value="14"/>
+      </div>
+      <div class="field">
+        <label>Dias de folga</label>
+        <input type="number" id="diasFolga" min="1" value="14"/>
+        <p class="hint">Padrão contratual</p>
+      </div>
+    </div>
+
+    <!-- DATA FINAL (opcional) -->
+    <div class="toggle-row">
+      <label>Definir período de contrato (data final)</label>
+      <button class="toggle" id="toggleFim" onclick="toggleDataFim()"></button>
+    </div>
+    <div id="fimBlock" style="display:none">
+      <div class="field">
+        <label>Último embarque — mês/ano</label>
+        <input type="month" id="ultimoEmbMes" placeholder="AAAA-MM"/>
+        <p class="hint">A escala para após o embarque que iniciar neste mês.</p>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="salvarEscala()">Salvar e gerar escala</button>
+    <button class="btn btn-danger"  onclick="resetarTudo()">Apagar tudo e recomeçar</button>
+  </div>
+  <div class="info-box">
+    <strong>ℹ️ Regra de folga por ajuste:</strong> 1 dia embarcado = 1,5 dias de folga (arredondado ↑).<br>
+    A data final define até quando a escala é gerada. Meses fora do período ficam acinzentados.
+  </div>
+</div>
+
+<!-- AJUSTES -->
+<div id="tab-ajustes" class="tab-content">
+  <div class="config-panel">
+    <h3>🔄 Registrar Ajuste de Escala</h3>
+    <div class="field">
+      <label>Data do embarque extra / antecipado</label>
+      <input type="date" id="ajusteData"/>
+    </div>
+    <div class="field">
+      <label>Tipo</label>
+      <select id="ajusteTipo">
+        <option value="">— Selecione —</option>
+        <option value="he">HE — Hora Extra (laranja)</option>
+        <option value="autopermuta">Autopermuta (ajusta folgas)</option>
+      </select>
+    </div>
+    <div id="ajustePermuInfo" style="display:none" class="info-box">
+      Na <strong>autopermuta</strong> você embarca na folga e a folga é devolvida no ciclo seguinte.
+    </div>
+    <button class="btn btn-primary" onclick="registrarAjuste()">Registrar ajuste</button>
+  </div>
+  <div class="section-title" id="ajustesListTitle" style="display:none">Ajustes registrados</div>
+  <div class="ajustes-list" id="ajustesList"></div>
+</div>
+
+<!-- FÉRIAS -->
+<div id="tab-ferias" class="tab-content">
+  <div class="config-panel">
+    <h3>🏖️ Agendar Férias</h3>
+    <div class="field">
+      <label>Início das férias</label>
+      <input type="date" id="feriasInicio"/>
+    </div>
+    <div class="field">
+      <label>Quantidade de dias</label>
+      <input type="number" id="feriasDias" min="1" value="30"/>
+    </div>
+    <button class="btn btn-primary" onclick="agendarFerias()">Agendar férias</button>
+  </div>
+  <div class="section-title" id="feriasListTitle" style="display:none">Férias agendadas</div>
+  <div class="ferias-list" id="feriasList"></div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle"></h3>
+    <div id="modalExtra"></div>
+    <div class="modal-info" id="modalMsg"></div>
+    <div class="modal-btns" id="modalBtns"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  ESTADO
+// ═══════════════════════════════════════════════════════
+let state = JSON.parse(localStorage.getItem('escala_state')||'null') || {
+  embarqueDate: null,   // primeiro embarque
+  ultimoEmbMes: null,   // 'YYYY-MM' — último mês de embarque (opcional)
+  diasEmb: 14,
+  diasFolga: 14,
+  ferias:   [],
+  ajustes:  [],
+  overrides:[],
+  dayEdits: {}
+};
+
+let viewYear=new Date().getFullYear(), viewMonth=new Date().getMonth();
+
+// multi-select
+let multiMode=false, selectedDays=new Set();
+
+// ── utils ──────────────────────────────────────────
+const parseDate=s=>{const[y,m,d]=s.split('-');return new Date(+y,+m-1,+d)};
+const fmt=d=>{
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
+  return`${y}-${m}-${dd}`};
+const addDays=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r};
+const dayOfWeek=d=>d.getDay();
+const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+             'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_SEM=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+function salvar(){localStorage.setItem('escala_state',JSON.stringify(state))}
+function formatBR(d){return`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`}
+function getOverride(s){return(state.overrides||[]).find(o=>o.dataEmbarque===s)||null}
+
+// Calcula data limite da escala a partir do ultimoEmbMes
+function getDataFim(){
+  if(!state.ultimoEmbMes||!state.embarqueDate) return addDays(parseDate(state.embarqueDate),730);
+  const[y,m]=state.ultimoEmbMes.split('-').map(Number);
+  // Encontra o ciclo de embarque que cai dentro do mês informado
+  // Gera ciclos até passar 12 meses depois do mês fim
+  const limBusca=new Date(y,m+5,1);
+  const ciclos=getCiclosRaw(limBusca);
+  // pega o último ciclo cujo embarque seja no mês y/m
+  let ultimo=null;
+  for(const c of ciclos){
+    if(c.embStart.getFullYear()===y&&c.embStart.getMonth()===m-1){ultimo=c;}
+    if(c.embStart>limBusca) break;
+  }
+  if(!ultimo) return new Date(y,m-1,28); // fallback
+  // fim da escala = fim do ciclo de folga desse último embarque
+  return addDays(ultimo.embStart, ultimo.diasEmb+ultimo.diasFolga-1);
+}
+
+// ═══════════════════════════════════════════════════════
+//  CICLOS
+// ═══════════════════════════════════════════════════════
+function getCiclosRaw(limFim){
+  if(!state.embarqueDate) return[];
+  const ciclos=[], ref=parseDate(state.embarqueDate);
+  if(!limFim) limFim=addDays(ref,730);
+  let cur=new Date(ref);
+  while(cur<=limFim){
+    const s=fmt(cur),ov=getOverride(s);
+    const cancelado=ov&&ov.cancelado;
+    const diasEmb  =(ov&&!cancelado&&ov.diasEmb!=null)  ?ov.diasEmb  :state.diasEmb;
+    const diasFolga=(ov&&!cancelado&&ov.diasFolga!=null) ?ov.diasFolga:state.diasFolga;
+    const avanco=cancelado?state.diasEmb+state.diasFolga:diasEmb+diasFolga;
+    ciclos.push({embStart:new Date(cur),diasEmb,diasFolga,cancelado,dateStr:s});
+    cur=addDays(cur,avanco);
+  }
+  return ciclos;
+}
+function getCiclos(){return getCiclosRaw(null);}
+
+// ═══════════════════════════════════════════════════════
+//  MAPA DE DIAS
+// ═══════════════════════════════════════════════════════
+function buildDayMap(){
+  const map={};
+  if(!state.embarqueDate) return map;
+  getCiclos().forEach(c=>_pintarCiclo(map,c));
+  (state.ajustes||[]).forEach(aj=>{
+    if(aj.tipo==='he') map[aj.data]='he';
+    else if(aj.tipo==='autopermuta'&&!map[aj.data]) map[aj.data]='embarque';
+  });
+  (state.ferias||[]).forEach(f=>{
+    const ini=parseDate(f.inicio);
+    for(let i=0;i<f.dias;i++) map[fmt(addDays(ini,i))]='ferias';
+  });
+  // dayEdits por cima de tudo
+  Object.entries(state.dayEdits||{}).forEach(([k,v])=>{map[k]=v;});
+  return map;
+}
+
+function _pintarCiclo(map,ciclo){
+  const{embStart,diasEmb,diasFolga,cancelado}=ciclo;
+  if(cancelado){
+    // cancelado → todos os dias do ciclo viram 'terra'
+    const total=state.diasEmb+state.diasFolga;
+    for(let i=0;i<total;i++){const k=fmt(addDays(embStart,i));if(!map[k])map[k]='terra';}
+    return;
+  }
+  const embEnd=addDays(embStart,diasEmb-1),folgaEnd=addDays(embStart,diasEmb+diasFolga-1);
+  const hasOv=getOverride(fmt(embStart))!==null;
+  const preKey=fmt(addDays(embStart,-1));
+  if(!map[preKey]) map[preKey]='pre-emb';
+  const embKey=fmt(embStart);
+  if(!map[embKey]) map[embKey]=hasOv?'embarque-mod':'embarque';
+  const desKey=fmt(embEnd);
+  if(!map[desKey]) map[desKey]='desembarque';
+  for(let i=1;i<=diasEmb-2;i++){
+    const k=fmt(addDays(embStart,i));
+    if(!map[k]) map[k]=i<=7?'turno-dia':'turno-noite';
+  }
+  for(let d=addDays(embEnd,1);d<=folgaEnd;d=addDays(d,1)){
+    const k=fmt(d);if(!map[k]) map[k]='folga';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER CALENDÁRIO
+// ═══════════════════════════════════════════════════════
+function renderCalendar(){
+  const map=buildDayMap(), today=fmt(new Date());
+  document.getElementById('monthTitle').textContent=`${MESES[viewMonth]} ${viewYear}`;
+
+  // range de datas ativas
+  const dataInicio=state.embarqueDate?parseDate(state.embarqueDate):null;
+  const dataFim   =state.embarqueDate?getDataFim():null;
+
+  const grid=document.getElementById('calGrid');
+  grid.innerHTML='';
+
+  const firstDay=new Date(viewYear,viewMonth,1).getDay();
+  const daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
+  for(let i=0;i<firstDay;i++){const el=document.createElement('div');el.className='day-cell empty';grid.appendChild(el);}
+
+  const LABELS={
+    'pre-emb':     ['pre-emb',     'Pré-emb'],
+    'embarque':    ['embarque',    'Embarque'],
+    'embarque-mod':['embarque-mod','Emb.✎'],
+    'desembarque': ['desembarque', 'Desemb.'],
+    'turno-dia':   ['turno-dia',   'T.Dia'],
+    'turno-noite': ['turno-noite', 'T.Noite'],
+    'folga':       ['folga',       ''],
+    'ferias':      ['ferias',      'Férias'],
+    'he':          ['he',          'HE'],
+    'cancelado':   ['cancelado',   ''],
+    'terra':       ['terra',       'Terra'],
+    'normal':      ['',            ''],
+  };
+
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=fmt(new Date(viewYear,viewMonth,d));
+    const dateObj=new Date(viewYear,viewMonth,d);
+    const tipo=map[dateStr]||'normal';
+    const el=document.createElement('div');
+    el.className='day-cell';
+
+    // fora do período ativo
+    if(dataInicio&&dateObj<dataInicio) el.classList.add('before-range');
+    else if(dataFim&&dateObj>dataFim)  el.classList.add('after-range');
+
+    if(dateStr===today) el.classList.add('today');
+    const[cls,lbl]=LABELS[tipo]||['',''];
+    if(cls) el.classList.add(cls);
+    if(selectedDays.has(dateStr)) el.classList.add('selected');
+
+    el.innerHTML=`<span>${d}</span>${lbl?`<span class="day-label">${lbl}</span>`:''}`;
+
+    // toque simples
+    el.addEventListener('click',()=>onDayClick(dateStr,tipo,el));
+    // toque longo → ativa multi-select
+    let longPressTimer;
+    el.addEventListener('pointerdown',()=>{
+      longPressTimer=setTimeout(()=>{
+        if(!multiMode) iniciarMultiSelect();
+        toggleSelectDay(dateStr,el);
+      },500);
+    });
+    el.addEventListener('pointerup',()=>clearTimeout(longPressTimer));
+    el.addEventListener('pointercancel',()=>clearTimeout(longPressTimer));
+
+    grid.appendChild(el);
+  }
+  updateStatus(map);
+  _updateSelBar();
+
+  // Atualiza header com período
+  if(state.embarqueDate&&state.ultimoEmbMes){
+    const[fy,fm]=state.ultimoEmbMes.split('-');
+    document.getElementById('headerSub').textContent=
+      `${formatBR(dataInicio)} → ${MESES[+fm-1]}/${fy}`;
+  } else {
+    document.getElementById('headerSub').textContent='Escala de embarque offshore';
+  }
+}
+
+function updateStatus(map){
+  if(!state.embarqueDate){
+    document.getElementById('statusBar').innerHTML='Configure sua escala na aba <strong>Escala</strong>.';return;
+  }
+  const tipo=map[fmt(new Date())]||'normal';
+  const MSGS={
+    'pre-emb':     '🔴 Hoje é <strong>véspera de embarque</strong>. Prepare as malas!',
+    'embarque':    '🟡 <strong>Dia de embarque</strong>! Boa viagem!',
+    'embarque-mod':'🟡 <strong>Dia de embarque</strong> (ajustado). Boa viagem!',
+    'desembarque': '🟢 <strong>Dia de desembarque</strong>! Bem-vindo em casa!',
+    'turno-dia':   '🔴 Embarcado — <strong>Turno Dia</strong>.',
+    'turno-noite': '🌑 Embarcado — <strong>Turno Noite</strong>.',
+    'folga':       '🏡 Você está de <strong>folga</strong> em terra.',
+    'ferias':      '🏖️ Você está de <strong>férias</strong>!',
+    'he':          '🟠 Embarcado em <strong>Hora Extra</strong>.',
+    'cancelado':   '⬛ Embarque <strong>cancelado</strong>.',
+    'terra':       '🏠 Dia em <strong>terra</strong>.',
+    'normal':      '📅 Fora do período da escala.',
+  };
+  document.getElementById('statusBar').innerHTML=MSGS[tipo]||'';
+}
+
+// ═══════════════════════════════════════════════════════
+//  MULTI-SELECT
+// ═══════════════════════════════════════════════════════
+function iniciarMultiSelect(){
+  multiMode=true;
+  selectedDays.clear();
+  _updateSelBar();
+}
+
+function cancelarMultiSelect(){
+  multiMode=false;
+  selectedDays.clear();
+  _updateSelBar();
+  renderCalendar();
+}
+
+function toggleSelectDay(dateStr, el){
+  if(!state.embarqueDate) return;
+  if(selectedDays.has(dateStr)){
+    selectedDays.delete(dateStr);
+    el.classList.remove('selected');
+  } else {
+    selectedDays.add(dateStr);
+    el.classList.add('selected');
+  }
+  _updateSelBar();
+}
+
+function _updateSelBar(){
+  const bar=document.getElementById('selBar');
+  if(multiMode&&selectedDays.size>0){
+    bar.classList.add('visible');
+    document.getElementById('selCount').textContent=
+      `${selectedDays.size} dia${selectedDays.size>1?'s':''} selecionado${selectedDays.size>1?'s':''}`;
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+function abrirModalMulti(){
+  if(!selectedDays.size) return;
+  const datas=[...selectedDays].sort();
+  const resumo=datas.length===1
+    ? formatBR(parseDate(datas[0]))
+    : `${formatBR(parseDate(datas[0]))} → ${formatBR(parseDate(datas[datas.length-1]))} (${datas.length} dias)`;
+
+  mostrarModal(
+    '✏️ Editar dias selecionados',
+    `Aplicando para: <strong>${resumo}</strong><br>Escolha o tipo:`,
+    [
+      {label:'✅ Aplicar',cls:'btn-primary',fn:'_aplicarMulti()'},
+      {label:'Cancelar', cls:'btn-cancel', fn:'fecharModal()'},
+    ],
+    _tipoGridHTML(null)
+  );
+}
+
+function _aplicarMulti(){
+  if(!_editTipo) return;
+  if(!state.dayEdits) state.dayEdits={};
+  selectedDays.forEach(d=>{state.dayEdits[d]=_editTipo;});
+  salvar();
+  fecharModal();
+  cancelarMultiSelect();
+  renderCalendar();
+}
+
+// ═══════════════════════════════════════════════════════
+//  CLIQUE NUM DIA (modo normal)
+// ═══════════════════════════════════════════════════════
+function onDayClick(dateStr, tipoAtual, el){
+  if(!state.embarqueDate) return;
+
+  if(multiMode){
+    toggleSelectDay(dateStr,el);
+    return;
+  }
+
+  const ciclo=getCiclos().find(c=>fmt(c.embStart)===dateStr);
+  const isEmbarqueCiclo=(tipoAtual==='embarque'||tipoAtual==='embarque-mod')
+                        &&ciclo&&!(state.dayEdits||{})[dateStr];
+
+  if(isEmbarqueCiclo){
+    _modalEmbarque(dateStr,ciclo);
+  } else {
+    _modalEditarDia(dateStr,tipoAtual);
+  }
+}
+
+// ── Modal ajuste de embarque (ciclo) ───────────────────
+function _modalEmbarque(dateStr,ciclo){
+  const ov=getOverride(dateStr);
+  const diasAtual=ciclo.diasEmb, folgaAtual=ciclo.diasFolga;
+
+  // Verifica se já tem férias iniciando nessa data
+  const feriaExistente=(state.ferias||[]).find(f=>f.inicio===dateStr);
+
+  const extra=`
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button onclick="_abaEmbarque()" id="abaEmbBtn"
+        style="flex:1;padding:9px;border-radius:10px;border:none;font-size:13px;font-weight:700;
+               cursor:pointer;background:var(--emb);color:#000">🛳️ Ajuste de Embarque</button>
+      <button onclick="_abaFerias('${dateStr}',${diasAtual})" id="abaFerBtn"
+        style="flex:1;padding:9px;border-radius:10px;border:none;font-size:13px;font-weight:700;
+               cursor:pointer;background:var(--ferias);color:var(--ferias-txt)">🏖️ Marcar Férias</button>
+    </div>
+    <div id="painelEmb">
+      <div class="calc-box" id="calcPreview">${_calcHTML(diasAtual)}</div>
+      <div class="modal-field">
+        <label>Dias embarcado neste turno</label>
+        <input type="number" id="overrideDias" min="1" max="90" value="${diasAtual}"
+               oninput="atualizarPreview(this.value)"/>
+      </div>
+    </div>
+    <div id="painelFer" style="display:none">
+      <div class="modal-info" style="margin-bottom:10px">
+        As férias serão marcadas a partir do <strong>dia do embarque</strong> (${formatBR(parseDate(dateStr))}).
+        O embarque deste ciclo será <strong>substituído pelas férias</strong>.
+        ${feriaExistente?`<br><br><span style="color:#fbbf24">⚠️ Já existe férias iniciando nesta data (${feriaExistente.dias} dias). Salvar irá substituir.</span>`:''}
+      </div>
+      <div class="modal-field">
+        <label>Quantidade de dias de férias</label>
+        <input type="number" id="feriasDiasEmb" min="1" value="${feriaExistente?feriaExistente.dias:30}"
+               oninput="_previewFeriasEmb('${dateStr}',this.value)"/>
+      </div>
+      <div class="calc-box" id="previewFeriasBox">${_previewFeriasHTML(dateStr, feriaExistente?feriaExistente.dias:30)}</div>
+    </div>`;
+
+  const statusTxt=ov&&ov.cancelado
+    ?'<span class="bad">⛔ Embarque cancelado</span>'
+    :ov?`<span style="color:#fbbf24">✎ Ajustado: ${diasAtual}d emb / ${folgaAtual}d folga</span>`
+       :`<span class="ok">✔ Padrão: ${diasAtual}d / ${folgaAtual}d</span>`;
+
+  mostrarModal(
+    `📅 ${formatBR(parseDate(dateStr))}`,
+    `${statusTxt}`,
+    [
+      {label:'💾 Salvar emb.',    cls:'btn-primary', fn:`salvarOverride('${dateStr}')`,   id:'btnSalvEmb'},
+      {label:'🏖️ Confirmar férias',cls:'btn-success', fn:`salvarFeriasEmb('${dateStr}')`, id:'btnSalvFer', hidden:true},
+      {label:'↩️ Restaurar',      cls:'btn-warning',  fn:`restaurarPadrao('${dateStr}')`},
+      {label:'❌ Cancelar emb.',  cls:'btn-danger',   fn:`cancelarEmbarque('${dateStr}')`},
+      {label:'Fechar',            cls:'btn-cancel',   fn:'fecharModal()'},
+    ],
+    extra
+  );
+
+  // Guarda qual painel está ativo para os botões
+  window._embModalDate=dateStr;
+  window._embModalPane='emb';
+}
+
+function _abaEmbarque(){
+  document.getElementById('painelEmb').style.display='block';
+  document.getElementById('painelFer').style.display='none';
+  window._embModalPane='emb';
+  // Troca botões
+  _setModalBtnVisibility(true);
+}
+
+function _abaFerias(dateStr, diasEmb){
+  document.getElementById('painelEmb').style.display='none';
+  document.getElementById('painelFer').style.display='block';
+  window._embModalPane='fer';
+  _setModalBtnVisibility(false);
+}
+
+function _setModalBtnVisibility(embPane){
+  // btn-primary = salvar emb, btn-success = confirmar ferias
+  const btns=document.querySelectorAll('#modalBtns .btn');
+  btns.forEach(b=>{
+    if(b.textContent.includes('Salvar emb'))     b.style.display=embPane?'':'none';
+    if(b.textContent.includes('Confirmar férias'))b.style.display=embPane?'none':'';
+  });
+}
+
+function _previewFeriasHTML(dateStr, dias){
+  const n=parseInt(dias)||0;
+  if(!n) return 'Informe a quantidade de dias.';
+  const ini=parseDate(dateStr), fim=addDays(ini,n-1);
+  return`🏖️ Férias de <strong>${formatBR(ini)}</strong> até <strong>${formatBR(fim)}</strong> — <span class="val">${n} dias</span>`;
+}
+
+function _previewFeriasEmb(dateStr,val){
+  const el=document.getElementById('previewFeriasBox');
+  if(el) el.innerHTML=_previewFeriasHTML(dateStr,val);
+}
+
+function salvarFeriasEmb(dateStr){
+  const dias=parseInt((document.getElementById('feriasDiasEmb')||{}).value);
+  if(!dias||dias<1){alert('Informe número válido de dias.');return;}
+
+  // Remove férias existente na mesma data se houver
+  state.ferias=(state.ferias||[]).filter(f=>f.inicio!==dateStr);
+
+  // Valida dia da semana
+  const ini=parseDate(dateStr), dow=ini.getDay();
+  if([4,5,6,0].includes(dow)){
+    mostrarModal('⚠️ Atenção',
+      `Este embarque cai em <strong>${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]}</strong>.<br><br>
+       A regra das férias não permite início de Quinta a Domingo.<br>
+       Você ainda pode salvar, mas verifique com o RH.`,
+      [
+        {label:'Salvar mesmo assim',cls:'btn-warning',fn:`_forcarFeriasEmb('${dateStr}',${dias})`},
+        {label:'Cancelar',          cls:'btn-cancel', fn:'fecharModal()'},
+      ]
+    );
+    return;
+  }
+
+  _forcarFeriasEmb(dateStr, dias);
+}
+
+function _forcarFeriasEmb(dateStr, dias){
+  // Salva férias
+  state.ferias.push({inicio:dateStr, dias});
+  state.ferias.sort((a,b)=>a.inicio.localeCompare(b.inicio));
+  salvar();
+  fecharModal();
+  renderCalendar();
+  renderFeriasList();
+  switchTab('ferias');
+}
+
+// ── Modal editar dia individual ─────────────────────────
+let _editTipo='';
+
+const TIPOS_MANUAIS=[
+  {tipo:'embarque',   label:'Embarque',   cor:'var(--emb)',         txt:'#000'},
+  {tipo:'turno-dia',  label:'T.Dia',      cor:'var(--turno-dia)',   txt:'var(--turno-dia-txt)'},
+  {tipo:'turno-noite',label:'T.Noite',    cor:'var(--turno-noite)', txt:'var(--turno-noite-txt)'},
+  {tipo:'desembarque',label:'Desembarque',cor:'var(--desemb)',      txt:'#fff'},
+  {tipo:'folga',      label:'Folga',      cor:'var(--folga)',       txt:'var(--folga-txt)'},
+  {tipo:'terra',      label:'Em terra',   cor:'var(--terra)',       txt:'var(--terra-txt)'},
+  {tipo:'ferias',     label:'Férias',     cor:'var(--ferias)',      txt:'var(--ferias-txt)'},
+  {tipo:'he',         label:'HE',         cor:'var(--he)',          txt:'#fff'},
+  {tipo:'cancelado',  label:'Cancelado',  cor:'var(--cancelado)',   txt:'var(--cancelado-txt)'},
+];
+
+function _tipoGridHTML(tipoAtual){
+  return`<div class="tipo-grid">`+TIPOS_MANUAIS.map(t=>`
+    <button class="tipo-btn${tipoAtual===t.tipo?' sel':''}"
+      onclick="selecionarTipo('${t.tipo}',this)">
+      <div class="dot" style="background:${t.cor};${t.tipo==='terra'?'border:1px solid #999;':''}"></div>
+      ${t.label}
+    </button>`).join('')+`</div>`;
+}
+
+function _modalEditarDia(dateStr,tipoAtual){
+  _editTipo=tipoAtual;
+  const d=parseDate(dateStr);
+  const hasDayEdit=!!(state.dayEdits||{})[dateStr];
+  mostrarModal(
+    `📅 ${DIAS_SEM[d.getDay()]}, ${formatBR(d)}`,
+    `Tipo atual: <strong>${_tipoLabel(tipoAtual)}</strong>`,
+    [
+      {label:'✅ Aplicar',cls:'btn-primary',fn:'_aplicarDia()'},
+      ...(hasDayEdit?[{label:'↩️ Restaurar',cls:'btn-warning',fn:`restaurarDia('${dateStr}')`}]:[]),
+      {label:'Fechar',cls:'btn-cancel',fn:'fecharModal()'},
+    ],
+    _tipoGridHTML(tipoAtual)
+  );
+  window._editDayStr=dateStr;
+}
+
+function selecionarTipo(tipo,btn){
+  _editTipo=tipo;
+  document.querySelectorAll('.tipo-btn').forEach(b=>{b.classList.remove('sel');});
+  btn.classList.add('sel');
+}
+
+function _aplicarDia(){
+  if(!window._editDayStr||!_editTipo){alert('Selecione um tipo.');return;}
+  if(!state.dayEdits) state.dayEdits={};
+  state.dayEdits[window._editDayStr]=_editTipo;
+  salvar();fecharModal();renderCalendar();
+}
+
+function restaurarDia(dateStr){
+  if(state.dayEdits) delete state.dayEdits[dateStr];
+  salvar();fecharModal();renderCalendar();
+}
+
+function _tipoLabel(tipo){
+  const t=TIPOS_MANUAIS.find(x=>x.tipo===tipo);
+  const M={'pre-emb':'Pré-embarque','embarque-mod':'Embarque (ajustado)','normal':'Sem marcação'};
+  return t?t.label:(M[tipo]||tipo);
+}
+
+// ── Override de embarque (ajuste do ciclo) ──────────────
+function _calcHTML(dias){
+  const n=parseInt(dias)||0,f=Math.ceil(n*1.5),ex=n*1.5;
+  return`📊 <strong>${n}</strong> dias emb → folga: <span class="val">${f} dias</span>${ex!==f?` (${ex}→↑)`:''}`;
+}
+function atualizarPreview(v){const el=document.getElementById('calcPreview');if(el)el.innerHTML=_calcHTML(v);}
+function salvarOverride(dateStr){
+  const dias=parseInt((document.getElementById('overrideDias')||{}).value);
+  if(!dias||dias<1){alert('Número inválido.');return;}
+  const folga=Math.ceil(dias*1.5);
+  _setOverride(dateStr,{diasEmb:dias,diasFolga:folga,cancelado:false});
+  fecharModal();renderCalendar();renderFeriasList();
+}
+function restaurarPadrao(dateStr){
+  state.overrides=(state.overrides||[]).filter(o=>o.dataEmbarque!==dateStr);
+  salvar();fecharModal();renderCalendar();renderFeriasList();
+}
+function cancelarEmbarque(dateStr){
+  mostrarModal('❌ Cancelar embarque',
+    `Cancelar o embarque de <strong>${formatBR(parseDate(dateStr))}</strong>?<br><br>
+     Todos os dias do ciclo serão marcados como <strong>"Em terra" (branco)</strong>.`,
+    [
+      {label:'Sim, cancelar',cls:'btn-danger', fn:`_confirmaCancelamento('${dateStr}')`},
+      {label:'Voltar',       cls:'btn-cancel', fn:'fecharModal()'},
+    ]
+  );
+}
+function _confirmaCancelamento(dateStr){
+  _setOverride(dateStr,{diasEmb:state.diasEmb,diasFolga:state.diasFolga,cancelado:true});
+  fecharModal();renderCalendar();renderFeriasList();
+}
+function _setOverride(dateStr,dados){
+  if(!state.overrides) state.overrides=[];
+  const idx=state.overrides.findIndex(o=>o.dataEmbarque===dateStr);
+  const entry={dataEmbarque:dateStr,...dados};
+  if(idx>=0) state.overrides[idx]=entry; else state.overrides.push(entry);
+  salvar();
+}
+
+// ═══════════════════════════════════════════════════════
+//  NAVEGAÇÃO
+// ═══════════════════════════════════════════════════════
+document.getElementById('prevMonth').onclick=()=>{
+  if(--viewMonth<0){viewMonth=11;viewYear--;} renderCalendar();};
+document.getElementById('nextMonth').onclick=()=>{
+  if(++viewMonth>11){viewMonth=0;viewYear++;} renderCalendar();};
+
+// ═══════════════════════════════════════════════════════
+//  DATA FIM — toggle
+// ═══════════════════════════════════════════════════════
+let _fimAtivo=false;
+function toggleDataFim(){
+  _fimAtivo=!_fimAtivo;
+  document.getElementById('toggleFim').classList.toggle('on',_fimAtivo);
+  document.getElementById('fimBlock').style.display=_fimAtivo?'block':'none';
+  if(!_fimAtivo) document.getElementById('ultimoEmbMes').value='';
+}
+
+// ═══════════════════════════════════════════════════════
+//  SALVAR ESCALA BASE
+// ═══════════════════════════════════════════════════════
+function salvarEscala(){
+  const d=document.getElementById('embarqueDate').value;
+  const e=parseInt(document.getElementById('diasEmb').value);
+  const f=parseInt(document.getElementById('diasFolga').value);
+  if(!d){alert('Informe a data do 1º embarque.');return;}
+  if(!e||e<1){alert('Dias embarcado inválido.');return;}
+  if(!f||f<1){alert('Dias de folga inválido.');return;}
+  state.embarqueDate=d;
+  state.diasEmb=e;
+  state.diasFolga=f;
+  const mesVal=document.getElementById('ultimoEmbMes').value;
+  state.ultimoEmbMes=_fimAtivo&&mesVal?mesVal:null;
+  salvar();renderCalendar();renderFeriasList();switchTab('calendario');
+}
+
+// ═══════════════════════════════════════════════════════
+//  AJUSTES HE / AUTOPERMUTA
+// ═══════════════════════════════════════════════════════
+document.getElementById('ajusteTipo').addEventListener('change',function(){
+  document.getElementById('ajustePermuInfo').style.display=this.value==='autopermuta'?'block':'none';});
+
+function registrarAjuste(){
+  if(!state.embarqueDate){mostrarModal('⚠️','Configure a escala primeiro.');return;}
+  const dataStr=document.getElementById('ajusteData').value;
+  const tipo=document.getElementById('ajusteTipo').value;
+  if(!dataStr){mostrarModal('⚠️','Informe a data.');return;}
+  if(!tipo){mostrarModal('⚠️','Selecione o tipo.');return;}
+  if(parseDate(dataStr)<parseDate(state.embarqueDate)){
+    mostrarModal('⚠️','Data anterior ao início da escala.');return;}
+  const map=buildDayMap(),tipoNo=map[dataStr]||'normal';
+  if(tipoNo!=='folga'){
+    mostrarModal('⚠️ Inválido',`Dia não é folga (é: <strong>${_tipoLabel(tipoNo)}</strong>).`);return;}
+  if((state.ajustes||[]).some(a=>a.data===dataStr)){
+    mostrarModal('⚠️ Duplicado','Já existe ajuste nessa data.');return;}
+  if(tipo==='he'){
+    state.ajustes.push({data:dataStr,tipo:'he'});
+    salvar();renderAjustesList();renderCalendar();
+    mostrarModal('✅ HE Registrada',`<span class="ok">${formatBR(parseDate(dataStr))}</span> marcado como HE.`,
+      [{label:'OK',cls:'btn-success',fn:'fecharModal()'}]);
+  } else {
+    mostrarModal('🔄 Autopermuta',
+      `Embarque em <strong>${formatBR(parseDate(dataStr))}</strong> durante folga. Confirma?`,
+      [{label:'Confirmar',cls:'btn-primary',fn:`_confirmaAutopermuta('${dataStr}')`},
+       {label:'Cancelar', cls:'btn-cancel', fn:'fecharModal()'}]);
+  }
+}
+function _confirmaAutopermuta(d){
+  fecharModal();state.ajustes.push({data:d,tipo:'autopermuta'});
+  salvar();renderAjustesList();renderCalendar();switchTab('ajustes');
+}
+function removerAjuste(i){
+  if(!confirm('Remover?'))return;
+  state.ajustes.splice(i,1);salvar();renderAjustesList();renderCalendar();
+}
+function renderAjustesList(){
+  const el=document.getElementById('ajustesList'),t=document.getElementById('ajustesListTitle');
+  if(!(state.ajustes||[]).length){el.innerHTML='<div class="empty-state">Nenhum ajuste.</div>';t.style.display='none';return;}
+  t.style.display='block';
+  el.innerHTML=state.ajustes.map((a,i)=>{
+    const badge=a.tipo==='he'?'<span class="aj-badge badge-he">HE</span>':'<span class="aj-badge badge-auto">Autopermuta</span>';
+    return`<div class="ajuste-item">
+      <div class="aj-header">
+        <div class="aj-info"><div><strong>${formatBR(parseDate(a.data))}</strong></div>
+        <small>${a.tipo==='he'?'🟠 Hora Extra':'🔄 Autopermuta'}</small></div>${badge}
+      </div>
+      <button onclick="removerAjuste(${i})">Remover</button>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  FÉRIAS
+// ═══════════════════════════════════════════════════════
+function agendarFerias(){
+  const inicioStr=document.getElementById('feriasInicio').value;
+  const dias=parseInt(document.getElementById('feriasDias').value);
+  if(!inicioStr){mostrarModal('⚠️','Informe a data de início.');return;}
+  if(!dias||dias<1){mostrarModal('⚠️','Informe dias válidos.');return;}
+  const ini=parseDate(inicioStr),dow=dayOfWeek(ini);
+  if([4,5,6,0].includes(dow)){
+    mostrarModal('⚠️ Férias inválidas',
+      `Não pode começar de <strong>Quinta a Domingo</strong>.<br>
+       <strong>${formatBR(ini)}</strong> é <strong>${DIAS_SEM[dow]}</strong>.<br>
+       Escolha Seg, Ter ou Qua.`);return;
+  }
+  if(state.embarqueDate){
+    const t=(buildDayMap())[inicioStr];
+    if(['turno-dia','turno-noite','embarque','embarque-mod'].includes(t)){
+      mostrarModal('⚠️ Inválido',`<strong>${formatBR(ini)}</strong> está num período embarcado.`);return;}
+  }
+  if((state.ferias||[]).some(f=>{
+    const a=parseDate(f.inicio),b=addDays(a,f.dias-1),c=ini,dd=addDays(ini,dias-1);
+    return c<=b&&dd>=a;})){mostrarModal('⚠️ Conflito','Já existe férias nessas datas.');return;}
+  const conf=_confFerias(inicioStr,dias);
+  if(conf.length){
+    const linhas=conf.map(c=>`• <strong>${formatBR(parseDate(c.data))}</strong>: ${c.descr}`).join('<br>');
+    const sug=_sugerirData(ini,dias);
+    mostrarModal('⚠️ Conflito com a Escala',
+      `${linhas}<br><br>💡 Sugestão: <strong>${formatBR(sug)}</strong>`,
+      [{label:`Usar ${formatBR(sug)}`,cls:'btn-success',fn:`_usarSugestao('${fmt(sug)}',${dias})`},
+       {label:'Salvar assim',cls:'btn-warning',fn:`_forcarFerias('${inicioStr}',${dias})`},
+       {label:'Cancelar',cls:'btn-cancel',fn:'fecharModal()'}]);
+    return;
+  }
+  _salvarFerias(inicioStr,dias);
+}
+function _confFerias(inicioStr,dias){
+  if(!state.embarqueDate)return[];
+  const map=buildDayMap(),ini=parseDate(inicioStr),conf=[];
+  const TC=['turno-dia','turno-noite','embarque','embarque-mod','desembarque','pre-emb'];
+  const D={'turno-dia':'T.Dia','turno-noite':'T.Noite','embarque':'Embarque',
+           'embarque-mod':'Embarque (aj.)','desembarque':'Desembarque','pre-emb':'Pré-embarque'};
+  for(let i=0;i<dias;i++){const k=fmt(addDays(ini,i));if(TC.includes(map[k]))conf.push({data:k,descr:D[map[k]]});}
+  return conf;
+}
+function _sugerirData(ini,dias){
+  for(let o=1;o<=90;o++){
+    const c=addDays(ini,o);
+    if([4,5,6,0].includes(dayOfWeek(c)))continue;
+    if(_confFerias(fmt(c),dias).length===0)return c;
+  }
+  return addDays(ini,7);
+}
+function _usarSugestao(s,dias){fecharModal();document.getElementById('feriasInicio').value=s;_salvarFerias(s,dias);}
+function _forcarFerias(s,dias){fecharModal();_salvarFerias(s,dias);}
+function _salvarFerias(s,dias){
+  state.ferias.push({inicio:s,dias});
+  state.ferias.sort((a,b)=>a.inicio.localeCompare(b.inicio));
+  salvar();renderFeriasList();renderCalendar();switchTab('ferias');
+}
+function removerFerias(i){
+  if(!confirm('Remover férias?'))return;
+  state.ferias.splice(i,1);salvar();renderFeriasList();renderCalendar();
+}
+function renderFeriasList(){
+  const el=document.getElementById('feriasList'),t=document.getElementById('feriasListTitle');
+  if(!(state.ferias||[]).length){el.innerHTML='<div class="empty-state">Nenhuma férias.</div>';t.style.display='none';return;}
+  t.style.display='block';
+  el.innerHTML=state.ferias.map((f,i)=>{
+    const ini=parseDate(f.inicio),fim=addDays(ini,f.dias-1),conf=_confFerias(f.inicio,f.dias);
+    const ct=conf.length?`<span class="conflict-tag">⚠️ ${conf.length} conflito(s)</span>`:'';
+    return`<div class="ferias-item${conf.length?' conflict':''}">
+      <div class="info">
+        <div>🏖️ ${formatBR(ini)} → ${formatBR(fim)}</div>
+        <small>${f.dias} dias ${ct}</small>
+      </div>
+      <button class="del-btn" onclick="removerFerias(${i})">🗑️ Apagar</button>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  RESET
+// ═══════════════════════════════════════════════════════
+function resetarTudo(){
+  if(!confirm('Apagar tudo?'))return;
+  localStorage.removeItem('escala_state');
+  state={embarqueDate:null,ultimoEmbMes:null,diasEmb:14,diasFolga:14,
+         ferias:[],ajustes:[],overrides:[],dayEdits:{}};
+  document.getElementById('embarqueDate').value='';
+  document.getElementById('diasEmb').value=14;
+  document.getElementById('diasFolga').value=14;
+  document.getElementById('ultimoEmbMes').value='';
+  if(_fimAtivo) toggleDataFim();
+  cancelarMultiSelect();
+  renderCalendar();renderFeriasList();renderAjustesList();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════
+function switchTab(name){
+  const names=['calendario','config','ajustes','ferias'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',names[i]===name));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════
+//  MODAL
+// ═══════════════════════════════════════════════════════
+function mostrarModal(titulo,msg,btns,extraHTML){
+  document.getElementById('modalTitle').textContent=titulo;
+  document.getElementById('modalMsg').innerHTML=msg;
+  document.getElementById('modalExtra').innerHTML=extraHTML||'';
+  const el=document.getElementById('modalBtns');
+  el.innerHTML=(!btns||!btns.length)
+    ?`<button class="btn btn-cancel" onclick="fecharModal()">Fechar</button>`
+    :btns.map(b=>`<button class="btn ${b.cls}" onclick="${b.fn}" style="${b.hidden?'display:none':''}">${b.label}</button>`).join('');
+  document.getElementById('modalOverlay').classList.remove('hidden');
+}
+function fecharModal(){document.getElementById('modalOverlay').classList.add('hidden');}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+(function init(){
+  if(!state.ajustes)      state.ajustes=[];
+  if(!state.overrides)    state.overrides=[];
+  if(!state.dayEdits)     state.dayEdits={};
+  if(!state.ultimoEmbMes) state.ultimoEmbMes=null;
+  if(state.embarqueDate){
+    document.getElementById('embarqueDate').value=state.embarqueDate;
+    document.getElementById('diasEmb').value=state.diasEmb;
+    document.getElementById('diasFolga').value=state.diasFolga;
+    if(state.ultimoEmbMes){
+      _fimAtivo=false; toggleDataFim();
+      document.getElementById('ultimoEmbMes').value=state.ultimoEmbMes;
+    }
+  }
+  renderCalendar();renderFeriasList();renderAjustesList();
+})();
+</script>
+</body>
+</html>
