@@ -1143,6 +1143,11 @@ function fecharModal(){document.getElementById('modalOverlay').classList.add('hi
     }
   }
   renderCalendar();renderFeriasList();renderAjustesList();
+
+  // Registra Service Worker para funcionamento offline
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
 })();
 </script>
 </body>
