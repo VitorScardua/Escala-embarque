@@ -161,6 +161,8 @@
     .tipo-btn.sel{border-color:var(--sel-border);color:var(--text)}
     .tipo-btn .dot{width:18px;height:18px;border-radius:5px;margin:0 auto 5px}
 
+    .turno-sel{border-color:var(--accent)!important;color:var(--text)!important;background:var(--surface)!important}
+
     /* ── STATUS ── */
     .status-bar{background:var(--surface2);border-radius:12px;
       margin:0 12px 16px;padding:12px 16px;border:1px solid var(--border);
@@ -429,6 +431,8 @@ function getCiclosRaw(limFim){
     const cancelado=ov&&ov.cancelado;
     const diasEmb  =(ov&&!cancelado&&ov.diasEmb!=null)  ?ov.diasEmb  :state.diasEmb;
     const diasFolga=(ov&&!cancelado&&ov.diasFolga!=null) ?ov.diasFolga:state.diasFolga;
+    // ciclo total = diasEmb dias a bordo + 1 desembarque (=1º folga) + (diasFolga-1) folgas restantes
+    // = diasEmb + diasFolga dias no total — lógica igual, só a pintura muda
     const avanco=cancelado?state.diasEmb+state.diasFolga:diasEmb+diasFolga;
     ciclos.push({embStart:new Date(cur),diasEmb,diasFolga,cancelado,dateStr:s});
     cur=addDays(cur,avanco);
@@ -460,24 +464,48 @@ function buildDayMap(){
 function _pintarCiclo(map,ciclo){
   const{embStart,diasEmb,diasFolga,cancelado}=ciclo;
   if(cancelado){
-    // cancelado → todos os dias do ciclo viram 'terra'
     const total=state.diasEmb+state.diasFolga;
     for(let i=0;i<total;i++){const k=fmt(addDays(embStart,i));if(!map[k])map[k]='terra';}
     return;
   }
-  const embEnd=addDays(embStart,diasEmb-1),folgaEnd=addDays(embStart,diasEmb+diasFolga-1);
+
+  // diasEmb = número de dias A BORDO (ex: 14)
+  // último dia a bordo = embStart + diasEmb - 1
+  // desembarque = embStart + diasEmb (dia seguinte = 1º dia de folga)
+  // folga restante = diasFolga - 1 dias após o desembarque
+  const ultimoDiaABordo = addDays(embStart, diasEmb - 1);
+  const desembarqueDay  = addDays(embStart, diasEmb);      // dia seguinte = desembarque
+  const folgaEnd        = addDays(desembarqueDay, diasFolga - 1); // desemb conta como 1 folga
+
   const hasOv=getOverride(fmt(embStart))!==null;
+  const ov=getOverride(fmt(embStart));
+  const turnoMode=ov&&ov.turno; // 'dia'|'noite'|null
+
+  // pré-embarque
   const preKey=fmt(addDays(embStart,-1));
   if(!map[preKey]) map[preKey]='pre-emb';
+
+  // dia do embarque
   const embKey=fmt(embStart);
   if(!map[embKey]) map[embKey]=hasOv?'embarque-mod':'embarque';
-  const desKey=fmt(embEnd);
-  if(!map[desKey]) map[desKey]='desembarque';
-  for(let i=1;i<=diasEmb-2;i++){
+
+  // dias a bordo (do dia 1 até o último, exclusive embarque)
+  // se turnoMode='dia' → todos turno-dia; 'noite' → todos turno-noite; null → split 7/7
+  for(let i=1;i<=diasEmb-1;i++){
     const k=fmt(addDays(embStart,i));
-    if(!map[k]) map[k]=i<=7?'turno-dia':'turno-noite';
+    if(!map[k]){
+      if(turnoMode==='dia')   map[k]='turno-dia';
+      else if(turnoMode==='noite') map[k]='turno-noite';
+      else map[k]=i<=7?'turno-dia':'turno-noite';
+    }
   }
-  for(let d=addDays(embEnd,1);d<=folgaEnd;d=addDays(d,1)){
+
+  // desembarque (1º dia de folga)
+  const desKey=fmt(desembarqueDay);
+  if(!map[desKey]) map[desKey]='desembarque';
+
+  // folga restante
+  for(let d=addDays(desembarqueDay,1);d<=folgaEnd;d=addDays(d,1)){
     const k=fmt(d);if(!map[k]) map[k]='folga';
   }
 }
@@ -569,7 +597,7 @@ function updateStatus(map){
   const MSGS={
     'pre-emb':     '🔴 Hoje é <strong>véspera de embarque</strong>. Prepare as malas!',
     'embarque':    '🟡 <strong>Dia de embarque</strong>! Boa viagem!',
-    'embarque-mod':'🟡 <strong>Dia de embarque</strong> (ajustado). Boa viagem!',
+    'embarque-mod':(()=>{const ov2=getOverride(fmt(new Date()));const obs=ov2&&ov2.obs?` — ${ov2.obs}`:'';const t=ov2&&ov2.turno?ov2.turno==='dia'?' ☀️ só dia':' 🌙 só noite':'';return`🟡 <strong>Dia de embarque</strong> (ajustado${t})${obs}. Boa viagem!`})(),
     'desembarque': '🟢 <strong>Dia de desembarque</strong>! Bem-vindo em casa!',
     'turno-dia':   '🔴 Embarcado — <strong>Turno Dia</strong>.',
     'turno-noite': '🌑 Embarcado — <strong>Turno Noite</strong>.',
@@ -680,35 +708,69 @@ function _modalEmbarque(dateStr,ciclo){
   // Verifica se já tem férias iniciando nessa data
   const feriaExistente=(state.ferias||[]).find(f=>f.inicio===dateStr);
 
+  const turnoAtual=ov?ov.turno||'':'' ;
+  const obsAtual  =ov?ov.obs||'':'';
+
   const extra=`
     <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button onclick="_abaEmbarque()" id="abaEmbBtn"
-        style="flex:1;padding:9px;border-radius:10px;border:none;font-size:13px;font-weight:700;
-               cursor:pointer;background:var(--emb);color:#000">🛳️ Ajuste de Embarque</button>
-      <button onclick="_abaFerias('${dateStr}',${diasAtual})" id="abaFerBtn"
-        style="flex:1;padding:9px;border-radius:10px;border:none;font-size:13px;font-weight:700;
-               cursor:pointer;background:var(--ferias);color:var(--ferias-txt)">🏖️ Marcar Férias</button>
+      <button onclick="_abaEmbarque()"
+        style="flex:1;padding:9px;border-radius:10px;border:2px solid var(--emb);
+               font-size:12px;font-weight:700;cursor:pointer;background:var(--emb);color:#000"
+        id="abaEmbBtn">🛳️ Embarque</button>
+      <button onclick="_abaFerias('${dateStr}',${diasAtual})"
+        style="flex:1;padding:9px;border-radius:10px;border:2px solid var(--ferias);
+               font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:var(--ferias-txt)"
+        id="abaFerBtn">🏖️ Férias</button>
     </div>
+
     <div id="painelEmb">
       <div class="calc-box" id="calcPreview">${_calcHTML(diasAtual)}</div>
+
       <div class="modal-field">
-        <label>Dias embarcado neste turno</label>
+        <label>Dias a bordo neste turno</label>
         <input type="number" id="overrideDias" min="1" max="90" value="${diasAtual}"
                oninput="atualizarPreview(this.value)"/>
       </div>
+
+      <div class="modal-field">
+        <label>Turno deste embarque</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:2px">
+          <button class="turno-btn${turnoAtual===''?' turno-sel':''}"
+            onclick="selTurno('',this)" style="padding:9px 4px;border-radius:9px;border:2px solid var(--border);
+            background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;cursor:pointer">
+            🔄 Padrão<br><small style="font-weight:400;font-size:10px">7 dia / 7 noite</small>
+          </button>
+          <button class="turno-btn${turnoAtual==='dia'?' turno-sel':''}"
+            onclick="selTurno('dia',this)" style="padding:9px 4px;border-radius:9px;border:2px solid var(--border);
+            background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;cursor:pointer">
+            ☀️ Só Dia<br><small style="font-weight:400;font-size:10px">todos T.Dia</small>
+          </button>
+          <button class="turno-btn${turnoAtual==='noite'?' turno-sel':''}"
+            onclick="selTurno('noite',this)" style="padding:9px 4px;border-radius:9px;border:2px solid var(--border);
+            background:var(--surface2);color:var(--muted);font-size:11px;font-weight:700;cursor:pointer">
+            🌙 Só Noite<br><small style="font-weight:400;font-size:10px">todos T.Noite</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>Observação (opcional)</label>
+        <input type="text" id="ovObs" placeholder="Ex: substituição, adiantamento..."
+               value="${obsAtual}" style="font-size:13px"/>
+      </div>
     </div>
+
     <div id="painelFer" style="display:none">
-      <div class="modal-info" style="margin-bottom:10px">
-        As férias serão marcadas a partir do <strong>dia do embarque</strong> (${formatBR(parseDate(dateStr))}).
-        O embarque deste ciclo será <strong>substituído pelas férias</strong>.
-        ${feriaExistente?`<br><br><span style="color:#fbbf24">⚠️ Já existe férias iniciando nesta data (${feriaExistente.dias} dias). Salvar irá substituir.</span>`:''}
+      <div class="modal-info" style="margin-bottom:10px;font-size:13px">
+        Férias a partir de <strong>${formatBR(parseDate(dateStr))}</strong> — substituindo este embarque.
+        ${feriaExistente?`<br><br><span style="color:#fbbf24">⚠️ Já existe férias aqui (${feriaExistente.dias} dias). Salvar substitui.</span>`:''}
       </div>
       <div class="modal-field">
         <label>Quantidade de dias de férias</label>
         <input type="number" id="feriasDiasEmb" min="1" value="${feriaExistente?feriaExistente.dias:30}"
                oninput="_previewFeriasEmb('${dateStr}',this.value)"/>
       </div>
-      <div class="calc-box" id="previewFeriasBox">${_previewFeriasHTML(dateStr, feriaExistente?feriaExistente.dias:30)}</div>
+      <div class="calc-box" id="previewFeriasBox">${_previewFeriasHTML(dateStr,feriaExistente?feriaExistente.dias:30)}</div>
     </div>`;
 
   const statusTxt=ov&&ov.cancelado
@@ -729,9 +791,10 @@ function _modalEmbarque(dateStr,ciclo){
     extra
   );
 
-  // Guarda qual painel está ativo para os botões
   window._embModalDate=dateStr;
   window._embModalPane='emb';
+  // inicializa turno selecionado
+  _turnoSel=turnoAtual;
 }
 
 function _abaEmbarque(){
@@ -872,16 +935,34 @@ function _tipoLabel(tipo){
 }
 
 // ── Override de embarque (ajuste do ciclo) ──────────────
+let _turnoSel=''; // ''|'dia'|'noite'
+
+function selTurno(val,btn){
+  _turnoSel=val;
+  document.querySelectorAll('.turno-btn').forEach(b=>{
+    b.classList.remove('turno-sel');
+    b.style.borderColor='var(--border)';
+    b.style.color='var(--muted)';
+    b.style.background='var(--surface2)';
+  });
+  btn.classList.add('turno-sel');
+  btn.style.borderColor='var(--accent)';
+  btn.style.color='var(--text)';
+  btn.style.background='var(--surface)';
+}
+
 function _calcHTML(dias){
   const n=parseInt(dias)||0,f=Math.ceil(n*1.5),ex=n*1.5;
-  return`📊 <strong>${n}</strong> dias emb → folga: <span class="val">${f} dias</span>${ex!==f?` (${ex}→↑)`:''}`;
+  return`📊 <strong>${n}</strong> dias a bordo → desemb. no dia ${n+1} → folga total: <span class="val">${f} dias</span>${ex!==f?` (${ex}→↑)`:''}`;
 }
 function atualizarPreview(v){const el=document.getElementById('calcPreview');if(el)el.innerHTML=_calcHTML(v);}
+
 function salvarOverride(dateStr){
   const dias=parseInt((document.getElementById('overrideDias')||{}).value);
   if(!dias||dias<1){alert('Número inválido.');return;}
   const folga=Math.ceil(dias*1.5);
-  _setOverride(dateStr,{diasEmb:dias,diasFolga:folga,cancelado:false});
+  const obs=(document.getElementById('ovObs')||{}).value||'';
+  _setOverride(dateStr,{diasEmb:dias,diasFolga:folga,cancelado:false,turno:_turnoSel,obs});
   fecharModal();renderCalendar();renderFeriasList();
 }
 function restaurarPadrao(dateStr){
