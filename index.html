@@ -161,6 +161,13 @@
     .tipo-btn.sel{border-color:var(--sel-border);color:var(--text)}
     .tipo-btn .dot{width:18px;height:18px;border-radius:5px;margin:0 auto 5px}
 
+    /* ── FERIADO ── */
+    .day-cell.feriado-folga    {border:2px solid #a855f7!important}
+    .day-cell.feriado-emb      {border:2px solid #a855f7!important}
+    .feriado-badge{position:absolute;top:1px;left:2px;font-size:7px;color:#a855f7;font-weight:900;line-height:1}
+    .extra-tag{font-size:6.5px;color:#f0c0ff;background:#4a0072;border-radius:3px;
+      padding:1px 3px;margin-top:1px;line-height:1.2;text-align:center}
+
     .turno-sel{border-color:var(--accent)!important;color:var(--text)!important;background:var(--surface)!important}
 
     /* ── STATUS ── */
@@ -236,10 +243,11 @@
 </div>
 
 <div class="tabs">
-  <button class="tab active" onclick="switchTab('calendario')">📅 Calendário</button>
+  <button class="tab active" onclick="switchTab('calendario')">📅 Cal.</button>
   <button class="tab" onclick="switchTab('config')">⚙️ Escala</button>
   <button class="tab" onclick="switchTab('ajustes')">🔄 Ajustes</button>
   <button class="tab" onclick="switchTab('ferias')">🏖️ Férias</button>
+  <button class="tab" onclick="switchTab('feriados')">🎉 Feriados</button>
 </div>
 
 <!-- CALENDÁRIO -->
@@ -262,6 +270,7 @@
     <div class="leg-item"><div class="leg-dot" style="background:var(--he)"></div>HE</div>
     <div class="leg-item"><div class="leg-dot" style="background:var(--ferias)"></div>Férias</div>
     <div class="leg-item"><div class="leg-dot" style="background:var(--cancelado);border:1px solid #555"></div>Cancelado</div>
+    <div class="leg-item"><div class="leg-dot" style="border:2px solid #a855f7;background:transparent"></div>Feriado</div>
   </div>
   <div class="status-bar" id="statusBar">Configure sua escala na aba <strong>Escala</strong>.</div>
   <div class="info-box" style="margin-top:0">
@@ -354,6 +363,25 @@
   <div class="ferias-list" id="feriasList"></div>
 </div>
 
+<!-- FERIADOS -->
+<div id="tab-feriados" class="tab-content">
+  <div class="config-panel">
+    <h3>🎉 Adicionar Feriado</h3>
+    <div class="field">
+      <label>Data do feriado</label>
+      <input type="date" id="feriadoData"/>
+    </div>
+    <div class="field">
+      <label>Nome do feriado</label>
+      <input type="text" id="feriadoNome" placeholder="Ex: Natal, Ano Novo..."/>
+    </div>
+    <button class="btn btn-primary" onclick="adicionarFeriado()">Adicionar feriado</button>
+    <button class="btn btn-warning" onclick="carregarFeriadosBR()">📋 Carregar feriados nacionais BR</button>
+  </div>
+  <div class="section-title" id="feriadosListTitle" style="display:none">Feriados cadastrados</div>
+  <div class="ferias-list" id="feriadosList"></div>
+</div>
+
 <!-- MODAL -->
 <div class="modal-overlay hidden" id="modalOverlay">
   <div class="modal">
@@ -369,14 +397,15 @@
 //  ESTADO
 // ═══════════════════════════════════════════════════════
 let state = JSON.parse(localStorage.getItem('escala_state')||'null') || {
-  embarqueDate: null,   // primeiro embarque
-  ultimoEmbMes: null,   // 'YYYY-MM' — último mês de embarque (opcional)
+  embarqueDate: null,
+  ultimoEmbMes: null,
   diasEmb: 14,
   diasFolga: 14,
-  ferias:   [],
-  ajustes:  [],
-  overrides:[],
-  dayEdits: {}
+  ferias:    [],
+  ajustes:   [],
+  overrides: [],
+  dayEdits:  {},
+  feriados:  []   // [{data:'YYYY-MM-DD', nome:'...'}]
 };
 
 let viewYear=new Date().getFullYear(), viewMonth=new Date().getMonth();
@@ -456,9 +485,15 @@ function buildDayMap(){
     const ini=parseDate(f.inicio);
     for(let i=0;i<f.dias;i++) map[fmt(addDays(ini,i))]='ferias';
   });
-  // dayEdits por cima de tudo
   Object.entries(state.dayEdits||{}).forEach(([k,v])=>{map[k]=v;});
   return map;
+}
+
+// Mapa de feriados: dateStr → nome
+function buildFeriadoMap(){
+  const m={};
+  (state.feriados||[]).forEach(f=>{ m[f.data]=f.nome; });
+  return m;
 }
 
 function _pintarCiclo(map,ciclo){
@@ -514,7 +549,7 @@ function _pintarCiclo(map,ciclo){
 //  RENDER CALENDÁRIO
 // ═══════════════════════════════════════════════════════
 function renderCalendar(){
-  const map=buildDayMap(), today=fmt(new Date());
+  const map=buildDayMap(), ferMap=buildFeriadoMap(), today=fmt(new Date());
   document.getElementById('monthTitle').textContent=`${MESES[viewMonth]} ${viewYear}`;
 
   // range de datas ativas
@@ -561,7 +596,17 @@ function renderCalendar(){
 
     el.innerHTML=`<span>${d}</span>${lbl?`<span class="day-label">${lbl}</span>`:''}`;
 
-    // toque simples
+    // feriado: borda roxa + emoji + "Extra" se embarcado
+    if(ferMap[dateStr]){
+      el.classList.add('feriado-folga');
+      const TIPOS_EMB=['embarque','embarque-mod','turno-dia','turno-noite','desembarque'];
+      const isEmb=TIPOS_EMB.includes(tipo);
+      el.innerHTML=`
+        <span class="feriado-badge">🎉</span>
+        <span>${d}</span>
+        ${lbl?`<span class="day-label">${lbl}</span>`:''}
+        ${isEmb?`<span class="extra-tag">+Extra</span>`:''}`;
+    }
     el.addEventListener('click',()=>onDayClick(dateStr,tipo,el));
     // toque longo → ativa multi-select
     let longPressTimer;
@@ -1091,30 +1136,60 @@ function agendarFerias(){
   const dias=parseInt(document.getElementById('feriasDias').value);
   if(!inicioStr){mostrarModal('⚠️','Informe a data de início.');return;}
   if(!dias||dias<1){mostrarModal('⚠️','Informe dias válidos.');return;}
-  const ini=parseDate(inicioStr),dow=dayOfWeek(ini);
-  if([4,5,6,0].includes(dow)){
-    mostrarModal('⚠️ Férias inválidas',
-      `Não pode começar de <strong>Quinta a Domingo</strong>.<br>
-       <strong>${formatBR(ini)}</strong> é <strong>${DIAS_SEM[dow]}</strong>.<br>
-       Escolha Seg, Ter ou Qua.`);return;
-  }
-  if(state.embarqueDate){
-    const t=(buildDayMap())[inicioStr];
-    if(['turno-dia','turno-noite','embarque','embarque-mod'].includes(t)){
-      mostrarModal('⚠️ Inválido',`<strong>${formatBR(ini)}</strong> está num período embarcado.`);return;}
-  }
+
+  const ini=parseDate(inicioStr);
+
+  // Sobreposição com férias existentes
   if((state.ferias||[]).some(f=>{
     const a=parseDate(f.inicio),b=addDays(a,f.dias-1),c=ini,dd=addDays(ini,dias-1);
     return c<=b&&dd>=a;})){mostrarModal('⚠️ Conflito','Já existe férias nessas datas.');return;}
+
+  // Verifica se é 1º dia de um embarque de ciclo
+  const ciclos=getCiclos();
+  const ehInicioEmbarque=ciclos.some(c=>fmt(c.embStart)===inicioStr);
+
+  if(state.embarqueDate && !ehInicioEmbarque){
+    const map=buildDayMap();
+    const tipoIni=map[inicioStr]||'normal';
+    const TIPO_LABEL={
+      'folga':'dia de folga','terra':'dia em terra','pre-emb':'véspera de embarque',
+      'turno-dia':'dia embarcado (T.Dia)','turno-noite':'dia embarcado (T.Noite)',
+      'desembarque':'dia de desembarque','ferias':'já é férias',
+      'he':'dia de HE','normal':'fora da escala'
+    };
+    const lbl=TIPO_LABEL[tipoIni]||tipoIni;
+
+    // Sugere o próximo início de embarque
+    const proxEmb=ciclos.find(c=>c.embStart>=ini);
+    const sugestao=proxEmb?`<br><br>💡 O próximo início de embarque é <strong>${formatBR(proxEmb.embStart)}</strong>.`:'';
+
+    mostrarModal('⚠️ Fora do início de embarque',
+      `A data <strong>${formatBR(ini)}</strong> é um <strong>${lbl}</strong> — não é o primeiro dia de um embarque na escala.${sugestao}<br><br>
+       As férias normalmente começam no 1º dia do embarque. Deseja continuar mesmo assim?`,
+      [
+        ...(proxEmb?[{label:`Usar ${formatBR(proxEmb.embStart)}`,cls:'btn-success',
+          fn:`_confirmarFerias('${fmt(proxEmb.embStart)}',${dias})`}]:[]),
+        {label:'Salvar mesmo assim',cls:'btn-warning',fn:`_confirmarFerias('${inicioStr}',${dias})`},
+        {label:'Cancelar',          cls:'btn-cancel', fn:'fecharModal()'},
+      ]
+    );
+    return;
+  }
+
+  _confirmarFerias(inicioStr,dias);
+}
+
+function _confirmarFerias(inicioStr,dias){
+  fecharModal();
   const conf=_confFerias(inicioStr,dias);
   if(conf.length){
     const linhas=conf.map(c=>`• <strong>${formatBR(parseDate(c.data))}</strong>: ${c.descr}`).join('<br>');
-    const sug=_sugerirData(ini,dias);
+    const sug=_sugerirData(parseDate(inicioStr),dias);
     mostrarModal('⚠️ Conflito com a Escala',
       `${linhas}<br><br>💡 Sugestão: <strong>${formatBR(sug)}</strong>`,
       [{label:`Usar ${formatBR(sug)}`,cls:'btn-success',fn:`_usarSugestao('${fmt(sug)}',${dias})`},
-       {label:'Salvar assim',cls:'btn-warning',fn:`_forcarFerias('${inicioStr}',${dias})`},
-       {label:'Cancelar',cls:'btn-cancel',fn:'fecharModal()'}]);
+       {label:'Salvar assim',        cls:'btn-warning', fn:`_forcarFerias('${inicioStr}',${dias})`},
+       {label:'Cancelar',            cls:'btn-cancel',  fn:'fecharModal()'}]);
     return;
   }
   _salvarFerias(inicioStr,dias);
@@ -1165,27 +1240,122 @@ function renderFeriasList(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  RESET
+//  FERIADOS
 // ═══════════════════════════════════════════════════════
+function adicionarFeriado(){
+  const data=document.getElementById('feriadoData').value;
+  const nome=document.getElementById('feriadoNome').value.trim();
+  if(!data){mostrarModal('⚠️','Informe a data do feriado.');return;}
+  if(!nome){mostrarModal('⚠️','Informe o nome do feriado.');return;}
+  if((state.feriados||[]).some(f=>f.data===data)){
+    mostrarModal('⚠️','Já existe feriado nessa data.');return;}
+  if(!state.feriados) state.feriados=[];
+  state.feriados.push({data,nome});
+  state.feriados.sort((a,b)=>a.data.localeCompare(b.data));
+  salvar();renderFeriadosList();renderCalendar();
+  document.getElementById('feriadoData').value='';
+  document.getElementById('feriadoNome').value='';
+}
+
+function removerFeriado(i){
+  if(!confirm('Remover feriado?'))return;
+  state.feriados.splice(i,1);salvar();renderFeriadosList();renderCalendar();
+}
+
+// Feriados nacionais BR fixos para o ano atual e próximo
+function carregarFeriadosBR(){
+  const anos=[new Date().getFullYear(), new Date().getFullYear()+1];
+  const fixos=[
+    ['01-01','Ano Novo'],['04-21','Tiradentes'],['05-01','Dia do Trabalho'],
+    ['09-07','Independência'],['10-12','Nossa Sra. Aparecida'],['11-02','Finados'],
+    ['11-15','Proclamação da República'],['11-20','Consciência Negra'],
+    ['12-25','Natal'],
+  ];
+  // Páscoa (algoritmo de Butcher)
+  function pascoa(y){
+    const a=y%19,b=Math.floor(y/100),c=y%100;
+    const d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
+    const g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
+    const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7;
+    const m=Math.floor((a+11*h+22*l)/451);
+    const mes=Math.floor((h+l-7*m+114)/31),dia=(h+l-7*m+114)%31+1;
+    return new Date(y,mes-1,dia);
+  }
+
+  if(!state.feriados) state.feriados=[];
+  let adicionados=0;
+  anos.forEach(y=>{
+    fixos.forEach(([md,nome])=>{
+      const data=`${y}-${md}`;
+      if(!state.feriados.some(f=>f.data===data)){
+        state.feriados.push({data,nome});adicionados++;
+      }
+    });
+    // Páscoa, Sexta Santa, Carnaval, Corpus Christi
+    const p=pascoa(y);
+    const extras=[
+      [addDays(p,-47),'Carnaval'],
+      [addDays(p,-2), 'Sexta-feira Santa'],
+      [p,             'Páscoa'],
+      [addDays(p,60), 'Corpus Christi'],
+    ];
+    extras.forEach(([d,nome])=>{
+      const data=fmt(d);
+      if(!state.feriados.some(f=>f.data===data)){
+        state.feriados.push({data,nome});adicionados++;
+      }
+    });
+  });
+  state.feriados.sort((a,b)=>a.data.localeCompare(b.data));
+  salvar();renderFeriadosList();renderCalendar();
+  mostrarModal('✅ Feriados carregados',
+    `<span style="color:var(--folga-txt)">${adicionados} feriados adicionados</span> para ${anos.join(' e ')}.`,
+    [{label:'OK',cls:'btn-success',fn:'fecharModal()'}]);
+}
+
+function renderFeriadosList(){
+  const el=document.getElementById('feriadosList');
+  const title=document.getElementById('feriadosListTitle');
+  if(!(state.feriados||[]).length){
+    el.innerHTML='<div class="empty-state">Nenhum feriado cadastrado.</div>';
+    title.style.display='none';return;
+  }
+  title.style.display='block';
+  const map=buildDayMap();
+  const TIPOS_EMB=['embarque','embarque-mod','turno-dia','turno-noite','desembarque'];
+  el.innerHTML=state.feriados.map((f,i)=>{
+    const d=parseDate(f.data);
+    const tipo=map[f.data]||'normal';
+    const isEmb=TIPOS_EMB.includes(tipo);
+    const extra=isEmb?`<span style="color:#f0c0ff;font-size:11px;font-weight:700"> ⭐ Extra de Feriado</span>`:'';
+    return`<div class="ferias-item" style="${isEmb?'border-color:#a855f7':''}">
+      <div class="info">
+        <div>🎉 ${formatBR(d)} — <strong>${f.nome}</strong>${extra}</div>
+        <small>${DIAS_SEM[d.getDay()]}${isEmb?' · embarcado':' · folga'}</small>
+      </div>
+      <button class="del-btn" onclick="removerFeriado(${i})">🗑️</button>
+    </div>`;
+  }).join('');
+}
 function resetarTudo(){
   if(!confirm('Apagar tudo?'))return;
   localStorage.removeItem('escala_state');
   state={embarqueDate:null,ultimoEmbMes:null,diasEmb:14,diasFolga:14,
-         ferias:[],ajustes:[],overrides:[],dayEdits:{}};
+         ferias:[],ajustes:[],overrides:[],dayEdits:{},feriados:[]};
   document.getElementById('embarqueDate').value='';
   document.getElementById('diasEmb').value=14;
   document.getElementById('diasFolga').value=14;
   document.getElementById('ultimoEmbMes').value='';
   if(_fimAtivo) toggleDataFim();
   cancelarMultiSelect();
-  renderCalendar();renderFeriasList();renderAjustesList();
+  renderCalendar();renderFeriasList();renderAjustesList();renderFeriadosList();
 }
 
 // ═══════════════════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════════════════
 function switchTab(name){
-  const names=['calendario','config','ajustes','ferias'];
+  const names=['calendario','config','ajustes','ferias','feriados'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',names[i]===name));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById(`tab-${name}`).classList.add('active');
@@ -1214,6 +1384,7 @@ function fecharModal(){document.getElementById('modalOverlay').classList.add('hi
   if(!state.overrides)    state.overrides=[];
   if(!state.dayEdits)     state.dayEdits={};
   if(!state.ultimoEmbMes) state.ultimoEmbMes=null;
+  if(!state.feriados)     state.feriados=[];
   if(state.embarqueDate){
     document.getElementById('embarqueDate').value=state.embarqueDate;
     document.getElementById('diasEmb').value=state.diasEmb;
@@ -1223,7 +1394,7 @@ function fecharModal(){document.getElementById('modalOverlay').classList.add('hi
       document.getElementById('ultimoEmbMes').value=state.ultimoEmbMes;
     }
   }
-  renderCalendar();renderFeriasList();renderAjustesList();
+  renderCalendar();renderFeriasList();renderAjustesList();renderFeriadosList();
 
   // Registra Service Worker para funcionamento offline
   if('serviceWorker' in navigator){
